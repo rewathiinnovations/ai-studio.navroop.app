@@ -25,6 +25,17 @@ function strings(node: unknown): string[] {
   return Object.values(node).flatMap(strings);
 }
 
+/**
+ * A string with its URLs removed, for the "nothing reads Multica" assertions.
+ *
+ * URLs keep the upstream name on purpose — they are addresses, and the
+ * components that render upstream's links drop them by matching on href. So a
+ * surviving `Multica` inside a URL is correct, while one in prose is a bug.
+ */
+function displayText(value: string): string {
+  return value.replace(/(?:https?:\/\/|www\.)[^\s<>"'`)\]]+/g, "");
+}
+
 describe("rebrandText", () => {
   it("replaces the product name", () => {
     expect(rebrandText("Welcome to Multica.")).toBe(`Welcome to ${BRAND.name}.`);
@@ -48,12 +59,37 @@ describe("rebrandText", () => {
   ])("leaves the identifier in %j untouched", (line) => {
     expect(rebrandText(line)).toBe(line);
   });
+
+  // A URL is an address, not prose. This shipped broken once: the landing
+  // footer rendered https://x.com/NR AI StudioAI — not a valid URL — and the
+  // component that was supposed to drop that link matches on href equality,
+  // so rewriting the href silently defeated the filter.
+  it.each([
+    "https://x.com/MulticaAI",
+    "https://github.com/multica-ai/multica",
+    "https://docs.multica.ai/self-hosting",
+    "www.multica.ai",
+  ])("leaves the URL %j byte-for-byte intact", (url) => {
+    expect(rebrandText(url)).toBe(url);
+  });
+
+  it("rebrands prose around a URL without touching the URL", () => {
+    expect(rebrandText("Multica docs live at https://docs.multica.ai/intro today.")).toBe(
+      `${BRAND.name} docs live at https://docs.multica.ai/intro today.`,
+    );
+  });
+
+  it("handles several URLs in one string", () => {
+    expect(
+      rebrandText("Multica: https://x.com/MulticaAI and https://multica.ai/pricing."),
+    ).toBe(`${BRAND.name}: https://x.com/MulticaAI and https://multica.ai/pricing.`);
+  });
 });
 
 describe("rebrandResources", () => {
   it.each(LOCALES)("leaves no display occurrence in %s", (locale) => {
     const remaining = strings(rebrandResources(RESOURCES[locale])).filter((s) =>
-      s.includes("Multica"),
+      displayText(s).includes("Multica"),
     );
     expect(remaining).toEqual([]);
   });
@@ -97,7 +133,7 @@ describe("landing dictionaries", () => {
     for (const allowSignup of [true, false]) {
       it(`leaves no display occurrence in ${locale} (allowSignup=${allowSignup})`, () => {
         const remaining = strings(rebrandResources(factory(allowSignup))).filter((s) =>
-          s.includes("Multica"),
+          displayText(s).includes("Multica"),
         );
         expect(remaining).toEqual([]);
       });

@@ -23,7 +23,26 @@ export const BRAND = {
 } as const;
 
 /**
- * Replace the upstream product name in a single string.
+ * Spans that must survive byte-for-byte. A URL is an address, not prose:
+ * rewriting one produces a link that either 404s or, when the brand name
+ * contains spaces, is not a valid URL at all.
+ *
+ * This is not hypothetical. `https://x.com/MulticaAI` in the landing footer
+ * became `https://x.com/NR AI StudioAI` and shipped, because the component
+ * drops upstream's social links by comparing hrefs against the constants in
+ * features/landing/components/shared.tsx — and a rewritten href no longer
+ * matches the constant it is compared to.
+ */
+const URL_SPAN = /(?:https?:\/\/|www\.)[^\s<>"'`)\]]+/g;
+
+function replaceProductName(value: string): string {
+  return value
+    .replace(/Multica's/g, BRAND.possessive)
+    .replace(/Multica/g, BRAND.name);
+}
+
+/**
+ * Replace the upstream product name in a single string, leaving URLs alone.
  *
  * Case-sensitive by design. A case-insensitive pass would also rewrite the
  * identifiers that legitimately carry the lowercase name and must keep
@@ -35,9 +54,15 @@ export const BRAND = {
  * render its own possessive rather than getting a mechanical "'s" appended.
  */
 export function rebrandText(value: string): string {
-  return value
-    .replace(/Multica's/g, BRAND.possessive)
-    .replace(/Multica/g, BRAND.name);
+  let out = "";
+  let cursor = 0;
+
+  for (const match of value.matchAll(URL_SPAN)) {
+    out += replaceProductName(value.slice(cursor, match.index)) + match[0];
+    cursor = match.index + match[0].length;
+  }
+
+  return out + replaceProductName(value.slice(cursor));
 }
 
 /**
