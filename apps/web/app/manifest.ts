@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { BRAND } from "@/lib/brand";
 
 /**
  * Web app manifest — what makes the mobile web app installable and lets it run
@@ -15,16 +16,15 @@ import type { MetadataRoute } from "next";
  * icon has no URL bar to recover from a wrong destination.
  *
  * The icons under /icons are generated, not hand-drawn. To regenerate after a
- * brand change, edit public/icons/icon.svg and run from public/icons:
+ * brand change, edit public/icons/icon.svg and run from the repo root:
  *
- *   sips -s format png --resampleHeightWidth 512 512 icon.svg --out icon-maskable-512.png
- *   sips -s format png --resampleHeightWidth 180 180 icon.svg --out apple-touch-icon.png
- *   sips -s format png --resampleHeightWidth 512 512 ../../../desktop/build/icon.png --out icon-512.png
- *   sips -s format png --resampleHeightWidth 192 192 ../../../desktop/build/icon.png --out icon-192.png
+ *   node scripts/generate-web-icons.mjs
  *
- * The two `any` icons come from the desktop app icon so an installed web app
- * and an installed desktop app show the same artwork; the maskable one is
- * full-bleed because Android crops it to the launcher's shape.
+ * All four come from icon.svg. Upstream sourced the two `any` icons from
+ * apps/desktop/build/icon.png so an installed web app and an installed desktop
+ * app matched, but this fork rebrands the web app only — see FORK.md — so
+ * pulling from the desktop icon would ship upstream artwork here. The maskable
+ * one is full-bleed because Android crops it to the launcher's shape.
  */
 
 /** Launch path. Exported so manifest.test.ts can run it through the proxy. */
@@ -33,8 +33,8 @@ export const PWA_START_URL = "/inbox";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Multica",
-    short_name: "Multica",
+    name: BRAND.name,
+    short_name: BRAND.shortName,
     description:
       "Assign tasks to coding agents, track progress, and keep your team's work in one place.",
     start_url: PWA_START_URL,

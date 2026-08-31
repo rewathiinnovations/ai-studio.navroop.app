@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { fetchLatestRelease } from "@/features/landing/utils/github-release";
 import { DownloadClient } from "./download-client";
+import { BRAND } from "@/lib/brand";
 
 // Vercel ISR: the server fetch inside fetchLatestRelease carries
 // `next: { revalidate: 300 }`, which makes GitHub API cost at most
@@ -9,13 +10,11 @@ import { DownloadClient } from "./download-client";
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  title: "Download Multica",
-  description:
-    "Download Multica for macOS, Windows, or Linux — or install the CLI for servers and remote dev boxes.",
+  title: `Download ${BRAND.name}`,
+  description: `Download ${BRAND.name} for macOS, Windows, or Linux — or install the CLI for servers and remote dev boxes.`,
   openGraph: {
-    title: "Download Multica",
-    description:
-      "Get the Multica desktop app with a bundled daemon, or install the CLI for servers and remote dev boxes.",
+    title: `Download ${BRAND.name}`,
+    description: `Get the ${BRAND.name} desktop app with a bundled daemon, or install the CLI for servers and remote dev boxes.`,
     url: "/download",
   },
   alternates: {

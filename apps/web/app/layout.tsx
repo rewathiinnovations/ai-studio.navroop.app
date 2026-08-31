@@ -8,6 +8,7 @@ import { WebProviders } from "@/components/web-providers";
 import type { SupportedLocale } from "@multica/core/i18n";
 import { RESOURCES } from "@multica/views/locales";
 import { getRequestLocale } from "@/lib/request-locale";
+import { BRAND, rebrandResources } from "@/lib/brand";
 import { SITE_TITLE, TITLE_TEMPLATE } from "@/platform/document-title";
 import {
   resolveBrowserApiBaseUrl,
@@ -73,7 +74,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://www.multica.ai"),
+  metadataBase: new URL("https://studio.navroop.app"),
   title: {
     default: SITE_TITLE,
     template: TITLE_TEMPLATE,
@@ -88,13 +89,13 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
   },
   // Home-screen behaviour: launch without browser chrome, and label the icon
-  // "Multica" rather than the long SEO <title>. `capable` renders the
-  // standardised `mobile-web-app-capable` tag — Next 16 no longer emits the
-  // deprecated apple-prefixed spelling, so iOS standalone rides on the
-  // manifest's `display` instead (honoured since iOS 16.4).
+  // with the short brand name rather than the long SEO <title>. `capable`
+  // renders the standardised `mobile-web-app-capable` tag — Next 16 no longer
+  // emits the deprecated apple-prefixed spelling, so iOS standalone rides on
+  // the manifest's `display` instead (honoured since iOS 16.4).
   appleWebApp: {
     capable: true,
-    title: "Multica",
+    title: BRAND.shortName,
     // `default` keeps the web view below the status bar. Going edge-to-edge
     // (`black-translucent` + viewport-fit=cover) needs env(safe-area-inset-*)
     // padding, which no surface in the app has yet.
@@ -102,13 +103,13 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    siteName: "Multica",
+    siteName: BRAND.name,
     locale: "en_US",
   },
+  // No `site`/`creator`: upstream's @multica_hq handle is not ours, and a wrong
+  // handle renders an attribution line for someone else's account in the card.
   twitter: {
     card: "summary_large_image",
-    site: "@multica_hq",
-    creator: "@multica_hq",
   },
   alternates: {
     canonical: "/",
@@ -136,7 +137,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const locale = await getRequestLocale();
-  const resources = { [locale]: RESOURCES[locale] };
+  // Single choke point for the fork's product name across all 25 namespaces.
+  // WebProviders forwards this prop untouched, so the server render and the
+  // client hydration see the same object and i18next cannot mismatch.
+  const resources = { [locale]: rebrandResources(RESOURCES[locale]) };
   const apiBaseUrl = resolveBrowserApiBaseUrl(process.env);
   const wsUrl = resolveBrowserWsUrl(process.env);
 

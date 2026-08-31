@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuthStore } from "@multica/core/auth";
 import { docsHrefForLocale, useLocale } from "../i18n";
 import { useDashboardCtaHref } from "../utils/use-dashboard-cta";
-import { GitHubMark, githubUrl, heroButtonClassName } from "./shared";
+import { heroButtonClassName } from "./shared";
 
 export function HowItWorksSection() {
   const { t, locale } = useLocale();
@@ -51,15 +51,6 @@ export function HowItWorksSection() {
             className={heroButtonClassName("ghost")}
           >
             {t.howItWorks.ctaDocs}
-          </Link>
-          <Link
-            href={githubUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={heroButtonClassName("ghost")}
-          >
-            <GitHubMark className="size-4" />
-            {t.howItWorks.ctaGithub}
           </Link>
         </div>
       </div>

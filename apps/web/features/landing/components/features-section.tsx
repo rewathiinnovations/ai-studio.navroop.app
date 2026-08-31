@@ -19,6 +19,7 @@ import {
   UserMinus,
 } from "lucide-react";
 import { cn } from "@multica/ui/lib/utils";
+import { BRAND } from "@/lib/brand";
 import { ImageIcon } from "./shared";
 import { useLocale } from "../i18n";
 import type { LandingDict } from "../i18n";
@@ -163,7 +164,7 @@ function TeammatesVisual() {
       {/* Header bar */}
       <div className="flex h-10 shrink-0 items-center border-b bg-background px-4 text-body">
         <div className="flex items-center gap-1.5 min-w-0 text-caption">
-          <span className="text-muted-foreground">Multica Demo</span>
+          <span className="text-muted-foreground">{BRAND.name} Demo</span>
           <ChevronRight className="h-3 w-3 text-faint-foreground shrink-0" />
           <span className="text-muted-foreground">MUL-18</span>
           <ChevronRight className="h-3 w-3 text-faint-foreground shrink-0" />
@@ -405,7 +406,7 @@ const mockToolCalls = [
   { type: "tool_use" as const, tool: "Read", summary: "server/internal/handler/comment.go" },
   { type: "tool_result" as const, preview: "func (h *CommentHandler) Create(w http.ResponseWriter, r *http.Request) { …" },
   { type: "tool_use" as const, tool: "Bash", summary: "go test ./internal/handler/ -run TestErrorResponses" },
-  { type: "tool_result" as const, preview: "ok  \tgithub.com/multica/server/internal/handler\t0.847s" },
+  { type: "tool_result" as const, preview: "ok  \tgithub.com/nrai/server/internal/handler\t0.847s" },
 ];
 
 const mockTaskHistory = [
@@ -422,7 +423,7 @@ function AutonomousVisual() {
       {/* Header bar */}
       <div className="flex h-10 shrink-0 items-center border-b bg-background px-4 text-body">
         <div className="flex items-center gap-1.5 min-w-0 text-caption">
-          <span className="text-muted-foreground">Multica Demo</span>
+          <span className="text-muted-foreground">{BRAND.name} Demo</span>
           <ChevronRight className="h-3 w-3 text-faint-foreground shrink-0" />
           <span className="text-muted-foreground">MUL-18</span>
           <ChevronRight className="h-3 w-3 text-faint-foreground shrink-0" />

@@ -1,7 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Multica">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="NR AI Studio">
+  <!--
+    Placeholder "NR" monogram pending final brand artwork. Built from stroked
+    geometric primitives rather than <text> so rasterizing to PNG (see
+    app/manifest.ts) never depends on a font being installed on the machine
+    running the conversion.
+
+    The in-app mark is still upstream's 8-point asterisk: MulticaIcon lives in
+    packages/ui and is shared with the desktop app, so this fork leaves it
+    alone. See FORK.md.
+  -->
   <rect width="100" height="100" rx="20" fill="#ffffff"/>
-  <polygon
-    fill="#111827"
-    points="45,62.1 45,100 55,100 55,62.1 81.8,88.9 88.9,81.8 62.1,55 100,55 100,45 62.1,45 88.9,18.2 81.8,11.1 55,37.9 55,0 45,0 45,37.9 18.2,11.1 11.1,18.2 37.9,45 0,45 0,55 37.9,55 11.1,81.8 18.2,88.9"
-  />
+  <g
+    fill="none"
+    stroke="#111827"
+    stroke-width="7.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M26,70 V30 L46,70 V30"/>
+    <path d="M56,70 V30 H67 A9,9 0 0 1 67,48 H56 M63,48 L74,70"/>
+  </g>
 </svg>

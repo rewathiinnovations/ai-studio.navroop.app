@@ -27,9 +27,12 @@ vi.mock("@multica/views/layout", () => ({
   },
 }));
 
+// Asserted against TITLE_SUFFIX rather than a literal product name: these
+// cover the page-name-then-suffix contract, not what the brand happens to be.
 import {
   MAX_PAGE_TITLE_LENGTH,
   SITE_TITLE,
+  TITLE_SUFFIX,
   formatDocumentTitle,
 } from "./document-title";
 import { WorkspaceDocumentTitle } from "./workspace-document-title";
@@ -48,7 +51,7 @@ beforeEach(() => {
 describe("formatDocumentTitle", () => {
   it("puts the page name in front of the product name", () => {
     expect(formatDocumentTitle("MUL-123: Fix login")).toBe(
-      "MUL-123: Fix login | Multica",
+      `MUL-123: Fix login${TITLE_SUFFIX}`,
     );
   });
 
@@ -64,14 +67,14 @@ describe("formatDocumentTitle", () => {
     const formatted = formatDocumentTitle(title);
 
     expect(formatted.startsWith("MUL-123: long")).toBe(true);
-    expect(formatted.endsWith("… | Multica")).toBe(true);
+    expect(formatted.endsWith(`…${TITLE_SUFFIX}`)).toBe(true);
     // Ellipsis replaces the clipped remainder, and no trailing space survives.
     expect(formatted).not.toContain(" … ");
   });
 
   it("clips on code points so an emoji is never cut in half", () => {
     const formatted = formatDocumentTitle("🎯".repeat(MAX_PAGE_TITLE_LENGTH + 10));
-    const pageTitle = formatted.slice(0, formatted.indexOf(" | Multica"));
+    const pageTitle = formatted.slice(0, formatted.indexOf(TITLE_SUFFIX));
 
     expect(Array.from(pageTitle)).toHaveLength(MAX_PAGE_TITLE_LENGTH + 1);
     expect(pageTitle).not.toContain("�");
@@ -80,7 +83,7 @@ describe("formatDocumentTitle", () => {
 
   it("leaves a title at the limit untouched", () => {
     const exact = "x".repeat(MAX_PAGE_TITLE_LENGTH);
-    expect(formatDocumentTitle(exact)).toBe(`${exact} | Multica`);
+    expect(formatDocumentTitle(exact)).toBe(`${exact}${TITLE_SUFFIX}`);
   });
 });
 
@@ -91,7 +94,7 @@ describe("WorkspaceDocumentTitle", () => {
 
     render(<WorkspaceDocumentTitle />);
 
-    expect(document.title).toBe("MUL-123: Fix login | Multica");
+    expect(document.title).toBe(`MUL-123: Fix login${TITLE_SUFFIX}`);
   });
 
   it("resolves against the full URL so a container's selection titles the tab", () => {
@@ -101,7 +104,7 @@ describe("WorkspaceDocumentTitle", () => {
     render(<WorkspaceDocumentTitle />);
 
     expect(presentation.urls).toContain("/acme/inbox?issue=abc&view=archived");
-    expect(document.title).toBe("MUL-9: Ping | Multica");
+    expect(document.title).toBe(`MUL-9: Ping${TITLE_SUFFIX}`);
   });
 
   it("keeps the site title on an unrecognized route", () => {
@@ -118,7 +121,7 @@ describe("WorkspaceDocumentTitle", () => {
     presentation.title = "Website redesign";
 
     const view = render(<WorkspaceDocumentTitle />);
-    expect(document.title).toBe("Website redesign | Multica");
+    expect(document.title).toBe(`Website redesign${TITLE_SUFFIX}`);
 
     view.unmount();
     expect(document.title).toBe(SITE_TITLE);
@@ -128,7 +131,7 @@ describe("WorkspaceDocumentTitle", () => {
     open("/acme/inbox");
     presentation.title = "Inbox";
     const view = render(<WorkspaceDocumentTitle />);
-    expect(document.title).toBe("Inbox | Multica");
+    expect(document.title).toBe(`Inbox${TITLE_SUFFIX}`);
 
     // A route change re-renders the target's metadata, resetting the title to
     // the root default before our effect gets to run again.
@@ -136,6 +139,6 @@ describe("WorkspaceDocumentTitle", () => {
     open("/acme/inbox", "view=archived");
     view.rerender(<WorkspaceDocumentTitle />);
 
-    expect(document.title).toBe("Inbox | Multica");
+    expect(document.title).toBe(`Inbox${TITLE_SUFFIX}`);
   });
 });

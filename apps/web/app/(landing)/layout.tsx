@@ -1,6 +1,7 @@
 import { Instrument_Serif } from "next/font/google";
 import { LocaleProvider } from "@/features/landing/i18n";
 import { getRequestLocale } from "@/lib/request-locale";
+import { BRAND } from "@/lib/brand";
 
 // Instrument Serif is the landing display face and is Latin-only. The full
 // `--font-serif` stack (Instrument Serif + the per-locale CJK serif tail) is
@@ -19,13 +20,14 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "Organization",
-      name: "Multica",
-      url: "https://www.multica.ai",
-      sameAs: ["https://github.com/multica-ai/multica"],
+      name: BRAND.name,
+      url: "https://studio.navroop.app",
+      // No `sameAs`: upstream's GitHub org is not ours, and pointing search
+      // engines at it would attribute this deployment to another entity.
     },
     {
       "@type": "SoftwareApplication",
-      name: "Multica",
+      name: BRAND.name,
       applicationCategory: "ProjectManagement",
       operatingSystem: "Web",
       description:

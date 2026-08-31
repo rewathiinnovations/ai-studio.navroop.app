@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import pg from "pg";
 import { loginAsDefault, createTestApi, preferManualCreateMode, reloadAppPage } from "./helpers";
 import type { TestApiClient } from "./fixtures";
+import { BRAND } from "../apps/web/lib/brand";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://multica:multica@localhost:5432/multica?sslmode=disable";
@@ -181,7 +182,7 @@ test.describe("Issues", () => {
     // The browser tab must name the issue, so several open at once stay
     // distinguishable without clicking into each (MUL-6222).
     await expect(page).toHaveTitle(
-      `${issue.identifier}: ${issue.title} | Multica`,
+      `${issue.identifier}: ${issue.title} | ${BRAND.name}`,
     );
   });
 

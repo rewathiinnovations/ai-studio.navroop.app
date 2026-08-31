@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { TestApiClient } from "./fixtures";
 import { waitForPageText } from "./helpers";
+import { BRAND } from "../apps/web/lib/brand";
 
 // Smoke test for the onboarding flow: welcome → About you (role +
 // use case on ONE screen) → workspace → runtime. The source question
@@ -36,7 +37,7 @@ test("onboarding — welcome → about you (answer path)", async ({ page }) => {
   //    source question must NOT exist anywhere in the flow.
   await expect(page.getByText("Tell us a bit about you.")).toBeVisible({ timeout: 10000 });
   await expect(page.getByText("Which best describes you?")).toBeVisible();
-  await expect(page.getByText("What do you want to use Multica for?")).toBeVisible();
+  await expect(page.getByText(`What do you want to use ${BRAND.name} for?`)).toBeVisible();
   // The rail names every step and marks the current one; the ordinal
   // counter it replaced is gone.
   await expect(page.locator('[data-slot="stepper-title"]')).toHaveText([
@@ -47,7 +48,7 @@ test("onboarding — welcome → about you (answer path)", async ({ page }) => {
   await expect(
     page.locator('[aria-current="step"]').filter({ hasText: "About you" }),
   ).toBeVisible();
-  await expect(page.getByText("How did you hear about Multica?")).toHaveCount(0);
+  await expect(page.getByText(`How did you hear about ${BRAND.name}?`)).toHaveCount(0);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${SHOTS_DIR}/02-about-you.png` });
 

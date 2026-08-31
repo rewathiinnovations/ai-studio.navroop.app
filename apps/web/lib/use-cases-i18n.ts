@@ -1,6 +1,7 @@
 import type { SupportedLocale } from "@multica/core/i18n";
 export { docsHrefForLocale } from "@/lib/docs-href";
 import { getRequestLocale } from "@/lib/request-locale";
+import { rebrandResources } from "@/lib/brand";
 
 export const getUseCaseLocale = getRequestLocale;
 
@@ -13,7 +14,9 @@ type UseCaseText = {
   tableOfContents: string;
 };
 
-export const useCaseText: Record<SupportedLocale, UseCaseText> = {
+// Wrapped rather than hand-edited so the eight brand strings below stay
+// byte-identical to upstream and merge cleanly. See apps/web/lib/brand.ts.
+export const useCaseText: Record<SupportedLocale, UseCaseText> = rebrandResources({
   en: {
     indexTitle: "Use cases",
     indexSubtitle:
@@ -53,4 +56,4 @@ export const useCaseText: Record<SupportedLocale, UseCaseText> = {
     cardReadMore: "続きを読む →",
     tableOfContents: "このページの内容",
   },
-};
+});

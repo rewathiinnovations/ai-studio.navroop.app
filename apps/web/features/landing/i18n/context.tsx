@@ -11,6 +11,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useConfigStore } from "@multica/core/config";
 import { createBrowserCookieLocaleAdapter } from "@multica/core/i18n/browser";
+import { rebrandResources } from "@/lib/brand";
 import { createEnDict } from "./en";
 import { createJaDict } from "./ja";
 import { createKoDict } from "./ko";
@@ -52,8 +53,15 @@ export function LocaleProvider({
   const router = useRouter();
   const localeAdapter = useMemo(() => createBrowserCookieLocaleAdapter(), []);
   const allowSignup = useConfigStore((state) => state.allowSignup);
+  // Single choke point for the fork's product name across all four landing
+  // dictionaries, so en/ja/ko/zh.ts stay byte-identical to upstream. The
+  // factories are called first because the dictionaries interpolate
+  // `allowSignup` before there is anything to transform.
   const t = useMemo(
-    () => dictionaryFactories[toLandingDictionaryLocale(locale)](allowSignup),
+    () =>
+      rebrandResources(
+        dictionaryFactories[toLandingDictionaryLocale(locale)](allowSignup),
+      ),
     [allowSignup, locale],
   );
 

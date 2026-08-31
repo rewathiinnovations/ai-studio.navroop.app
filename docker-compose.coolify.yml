@@ -1,0 +1,233 @@
+# Coolify deployment for this fork — see COOLIFY.md.
+#
+# Differs from docker-compose.selfhost.yml in five ways, all forced by Coolify:
+#
+#   1. The frontend is BUILT from this checkout. We changed apps/web, so
+#      ghcr.io/multica-ai/multica-web would serve upstream's branding.
+#   2. The backend is an upstream image at an explicit tag. We changed no Go
+#      code, so there is nothing to build — and `latest` would silently move
+#      our API under us.
+#   3. No `127.0.0.1:` port bindings. Upstream binds to loopback so the raw
+#      ports are never internet-facing; under Coolify that also hides the
+#      container from the Traefik proxy, which reaches it over the shared
+#      Docker network instead. `expose:` keeps the same guarantee — nothing is
+#      published on the host — while letting Traefik in.
+#   4. `SERVICE_FQDN_FRONTEND_3000` asks Coolify to provision the domain and
+#      the Let's Encrypt certificate. Only the frontend gets one.
+#   5. An explicit Traefik router for /ws on the backend. This is NOT optional:
+#      apps/web/proxy.ts matches /ws but forwards it with
+#      NextResponse.rewrite(), which cannot carry the WebSocket `Upgrade`
+#      handshake (SELF_HOSTING_ADVANCED.md:530). Without this router the app
+#      loads fine and then silently never receives a realtime update.
+#
+# Two variables drive every URL. Set both in Coolify:
+#   PUBLIC_ORIGIN=https://studio.navroop.app
+#   PUBLIC_HOST=studio.navroop.app
+# Written as literals rather than reusing .env.example's `${FRONTEND_ORIGIN}`
+# self-interpolation, which is a Compose-`.env` behaviour and is not guaranteed
+# under Coolify's env injection.
+#
+# The brand name is compiled into the JS bundle at `next build`, so changing it
+# needs a REBUILD, not a restart.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-multica}
+      POSTGRES_USER: ${POSTGRES_USER:-multica}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — generate one with 'openssl rand -hex 24'}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    # Migrations need pgcrypto and pg_trgm, both unguarded. pg_bigm and pg_cron
+    # are probed and skipped cleanly, so the stock pgvector image is enough.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-multica} -d ${POSTGRES_DB:-multica}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    # Pinned deliberately. v0.4.35 is the newest tag published to GHCR; this
+    # checkout's apps/web is 0.4.36, so the frontend runs one patch ahead of
+    # the API. Verify a tag exists before bumping:
+    #   docker buildx imagetools inspect ghcr.io/multica-ai/multica-backend:vX.Y.Z
+    image: ${MULTICA_BACKEND_IMAGE:-ghcr.io/multica-ai/multica-backend}:${MULTICA_IMAGE_TAG:-v0.4.35}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8080"
+    volumes:
+      - backend_uploads:/app/data/uploads
+    labels:
+      # Realtime only. Path() is an EXACT match, so the workspace slug /ws-foo
+      # still reaches the frontend — PathPrefix(`/ws`) would swallow it.
+      # The priority beats Coolify's generated Host-only frontend router.
+      - traefik.enable=true
+      - traefik.http.routers.nrws.rule=Host(`${PUBLIC_HOST}`) && Path(`/ws`)
+      - traefik.http.routers.nrws.priority=100
+      - traefik.http.routers.nrws.entrypoints=https
+      - traefik.http.routers.nrws.tls=true
+      - traefik.http.routers.nrws.tls.certresolver=letsencrypt
+      - traefik.http.services.nrws.loadbalancer.server.port=8080
+    # /healthz is the readiness probe. /health is liveness and answers 200 even
+    # with a dead database, so it is useless as a healthcheck. The image is bare
+    # alpine with no curl; wget comes from busybox.
+    # Migrations run in the entrypoint BEFORE the server binds, hence the long
+    # start_period — a cold database can take minutes.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multica}?sslmode=disable
+      PORT: "8080"
+      METRICS_ADDR: ${METRICS_ADDR:-}
+
+      # --- Required. The server refuses to boot in production on a placeholder.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set to a strong random value — generate one with 'openssl rand -hex 32'}
+
+      # --- Public identity. All three are the same origin on a single domain.
+      # FRONTEND_ORIGIN's scheme also decides whether session cookies are
+      # Secure, and CORS_ALLOWED_ORIGINS gates the WebSocket Origin check —
+      # get it wrong and /ws 403s while plain HTTP keeps working.
+      FRONTEND_ORIGIN: ${PUBLIC_ORIGIN}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-${PUBLIC_ORIGIN}}
+      MULTICA_APP_URL: ${PUBLIC_ORIGIN}
+      MULTICA_PUBLIC_URL: ${MULTICA_PUBLIC_URL:-${PUBLIC_ORIGIN}}
+      # Empty is correct for a single domain. Only needed when the frontend and
+      # backend sit on different subdomains. Never an IP literal.
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      APP_ENV: ${APP_ENV:-production}
+
+      # --- Behind Traefik. Without these every request appears to come from the
+      # proxy's IP, so the per-IP limiter on /auth/send-code becomes 5 req/min
+      # for the entire instance. Traefik is a container on the Docker network.
+      MULTICA_TRUSTED_PROXIES: ${MULTICA_TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+
+      # --- Private instance: invite-only.
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      DISABLE_WORKSPACE_CREATION: ${DISABLE_WORKSPACE_CREATION:-}
+
+      # --- Email. With neither Resend nor SMTP configured, login codes are only
+      # printed to the backend log, which makes the instance unusable by anyone
+      # without log access.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      SMTP_TLS: ${SMTP_TLS:-}
+      SMTP_TLS_INSECURE: ${SMTP_TLS_INSECURE:-false}
+      SMTP_EHLO_NAME: ${SMTP_EHLO_NAME:-}
+
+      # --- Google OAuth (optional).
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-${PUBLIC_ORIGIN}/auth/callback}
+
+      # --- Attachments. Unset S3_BUCKET keeps uploads on the backend_uploads
+      # volume, served through the frontend's /uploads proxy.
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-west-2}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-}
+      S3_USE_PATH_STYLE: ${S3_USE_PATH_STYLE:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ATTACHMENT_DOWNLOAD_MODE: ${ATTACHMENT_DOWNLOAD_MODE:-auto}
+      ATTACHMENT_DOWNLOAD_URL_TTL: ${ATTACHMENT_DOWNLOAD_URL_TTL:-30m}
+
+      # --- Database tuning.
+      MULTICA_DATABASE_STARTUP_TIMEOUT: ${MULTICA_DATABASE_STARTUP_TIMEOUT:-3m}
+      MULTICA_DATABASE_CONNECT_TIMEOUT: ${MULTICA_DATABASE_CONNECT_TIMEOUT:-5s}
+      MULTICA_SHUTDOWN_HOLD_DURATION: ${MULTICA_SHUTDOWN_HOLD_DURATION:-}
+      MULTICA_RUNTIME_RECONNECT_GRACE: ${MULTICA_RUNTIME_RECONNECT_GRACE:-}
+
+      # --- Managed Cloud stays off when self-hosting.
+      MULTICA_CLOUD_URL: ${MULTICA_CLOUD_URL:-}
+
+      # --- Integrations. Each *_SECRET_KEY is the opt-in: empty disables the
+      # feature cleanly rather than failing the boot.
+      GITHUB_APP_SLUG: ${GITHUB_APP_SLUG:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      # Upstream defaults VCS_INTEGRATION_ENABLED to true, which shows the UI
+      # while the feature silently fails without a key. Off unless you set both.
+      MULTICA_VCS_INTEGRATION_ENABLED: ${MULTICA_VCS_INTEGRATION_ENABLED:-false}
+      MULTICA_VCS_SECRET_KEY: ${MULTICA_VCS_SECRET_KEY:-}
+      MULTICA_LARK_SECRET_KEY: ${MULTICA_LARK_SECRET_KEY:-}
+      MULTICA_SLACK_SECRET_KEY: ${MULTICA_SLACK_SECRET_KEY:-}
+      MULTICA_WECOM_SECRET_KEY: ${MULTICA_WECOM_SECRET_KEY:-}
+      # Plugin surfaces need a SECOND, cookie-free origin. Leaving these empty
+      # disables surfaces; it does not weaken their isolation.
+      MULTICA_PLUGIN_SECRET_KEY: ${MULTICA_PLUGIN_SECRET_KEY:-}
+      MULTICA_PLUGIN_SURFACE_ORIGIN: ${MULTICA_PLUGIN_SURFACE_ORIGIN:-}
+      MULTICA_PLUGIN_API_URL: ${MULTICA_PLUGIN_API_URL:-}
+      MULTICA_PLUGIN_DIR: ${MULTICA_PLUGIN_DIR:-}
+
+      # --- Server-side LLM helpers (chat title generation and similar).
+      MULTICA_LLM_API_KEY: ${MULTICA_LLM_API_KEY:-}
+      MULTICA_LLM_BASE_URL: ${MULTICA_LLM_BASE_URL:-}
+      MULTICA_LLM_DEFAULT_MODEL: ${MULTICA_LLM_DEFAULT_MODEL:-}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      # The only build arg Dockerfile.web declares. The REMOTE_API_URL build arg
+      # in .github/workflows/release.yml is unconsumed — it is read at runtime.
+      args:
+        NEXT_PUBLIC_APP_VERSION: ${NEXT_PUBLIC_APP_VERSION:-nr-ai-studio}
+    # Start order only, deliberately NOT `condition: service_healthy`. The
+    # backend's healthcheck allows 180s for migrations, and proxy.ts resolves
+    # REMOTE_API_URL per request — so waiting buys nothing and risks Coolify
+    # timing out the whole deploy while migrations run.
+    depends_on:
+      - backend
+    expose:
+      - "3000"
+    environment:
+      # Coolify reads this to provision the domain and the TLS certificate.
+      SERVICE_FQDN_FRONTEND_3000: ${PUBLIC_ORIGIN}
+      HOSTNAME: "0.0.0.0"
+      # Read per-request by apps/web/proxy.ts, which forwards /api, /v1, /auth,
+      # /uploads, /health and /docs server-side. Changing it needs no rebuild.
+      REMOTE_API_URL: ${REMOTE_API_URL:-http://backend:8080}
+      DOCS_URL: ${DOCS_URL:-}
+      # Deliberately EMPTY. resolveBrowserApiBaseUrl returns undefined, so
+      # CoreProvider falls back to apiBaseUrl="" and the browser issues
+      # same-origin relative requests, while WebProviders derives
+      # wss://<host>/ws from window.location. One domain, no CORS, no baked
+      # URLs. Setting either would hard-code an origin into the bundle.
+      NEXT_PUBLIC_API_URL: ""
+      NEXT_PUBLIC_WS_URL: ""
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/manifest.webmanifest').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  backend_uploads:

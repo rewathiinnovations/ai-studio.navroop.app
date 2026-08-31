@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { loginAsDefault, waitForPageText } from "./helpers";
+import { TITLE_SUFFIX } from "../apps/web/platform/document-title";
 
 const ROUTE_CHANGE_TIMEOUT = 30000;
 
@@ -14,17 +15,17 @@ test.describe("Navigation", () => {
     await expect(page).toHaveURL(/\/inbox/, { timeout: ROUTE_CHANGE_TIMEOUT });
     await waitForPageText(page, "Inbox");
     // Each destination renames the browser tab after itself (MUL-6222).
-    await expect(page).toHaveTitle("Inbox | Multica");
+    await expect(page).toHaveTitle(`Inbox${TITLE_SUFFIX}`);
 
     await page.getByRole("link", { name: "Agents" }).click();
     await expect(page).toHaveURL(/\/agents/, { timeout: ROUTE_CHANGE_TIMEOUT });
     await waitForPageText(page, "Agents");
-    await expect(page).toHaveTitle("Agents | Multica");
+    await expect(page).toHaveTitle(`Agents${TITLE_SUFFIX}`);
 
     await page.getByRole("link", { name: "Issues", exact: true }).click();
     await expect(page).toHaveURL(/\/issues/, { timeout: ROUTE_CHANGE_TIMEOUT });
     await waitForPageText(page, "Issues");
-    await expect(page).toHaveTitle("Issues | Multica");
+    await expect(page).toHaveTitle(`Issues${TITLE_SUFFIX}`);
   });
 
   test("settings page loads via sidebar", async ({ page }) => {
