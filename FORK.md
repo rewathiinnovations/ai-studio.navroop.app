@@ -79,6 +79,24 @@ pinned by tests in `apps/web/lib/brand.test.ts`.
 `rebrandResources` copies and never mutates: the input is the shared `RESOURCES` object that the
 desktop renderer and the `packages/views` test harness also read.
 
+### URLs are never rewritten
+
+`rebrandText` splits each string on URL spans and rebrands only the prose between them, so
+`https://x.com/MulticaAI` and `https://docs.multica.ai/...` pass through untouched. A URL is an
+address, not display copy.
+
+This was a bug first, not a design decision. The transform rewrote every string leaf, so upstream's
+footer link shipped as `https://x.com/NR AI StudioAI` — spaces included, not a valid URL. Worse, it
+defeated the removal it was supposed to cooperate with: `landing-footer.tsx` drops upstream's
+social links by comparing each `href` against the constants in
+`features/landing/components/shared.tsx`, and a rewritten href no longer equals the constant it is
+compared against, so the filter passed it straight through.
+
+Consequence worth knowing when reading the tests: a surviving `Multica` **inside a URL is correct**.
+The "no occurrences anywhere" assertions strip URLs before checking, and the rendered-HTML audit
+checks visible text. To confirm no upstream URL leaks to the page, assert on hrefs instead — on
+`/` the only external href should be the site's own origin.
+
 ### Why there is no hydration mismatch
 
 `apps/web/components/web-providers.tsx` does **not** import `RESOURCES` — `resources` is a
@@ -145,6 +163,26 @@ desktop, so pulling from it would ship upstream artwork on our web icon.
 `packages/ui/components/common/multica-icon.tsx` — the 8-point asterisk still used as the in-app
 mark and the loading indicator — is **not** touched. It is shared with desktop and carries no name,
 so it needs no change.
+
+#### The landing hero screenshot had the name baked into pixels
+
+`apps/web/public/images/landing-hero.webp` is a 2640x1781 capture of the product, and the most
+prominent image on the site. It showed `Multica Demo` twice — sidebar and breadcrumb — with an `M`
+avatar beside each. No string transform reaches pixels, so the rendered-HTML audit reported a
+completely clean page while the homepage hero still read Multica. **Auditing HTML is not enough;
+look at the page.**
+
+Repaired by `scripts/rebrand-hero-image.mjs`, which is idempotent-unsafe by nature — it paints fixed
+coordinates, so re-running it on an already-patched file repaints the same boxes harmlessly, but
+running it after upstream *replaces* the screenshot would paint over whatever now sits there.
+Re-measure first. `--dry` writes a crop to `hero-preview.png` instead of touching the asset.
+
+`NR AI Studio` was chosen over `NR AI Studio Demo` because it has the same twelve characters as
+`Multica Demo` and therefore the same width — the longer form collided with the chevron and the `>`
+separator a few pixels to the right. Covered pixels are sampled row-wise from just outside each
+glyph run rather than flood-filled, because the avatar badge has a vertical gradient.
+
+The other five images in `public/images/` are decorative landscape artwork with no text.
 
 ### Tests changed
 
