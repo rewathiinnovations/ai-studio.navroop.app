@@ -50,6 +50,49 @@ random value — generate one with 'openssl rand -hex 32'
 A production backend also refuses to boot on a recognised placeholder value, so a "temporary" secret
 will not get you a running instance.
 
+### `POSTGRES_PASSWORD` must be URL-safe — hex, not punctuation
+
+`DATABASE_URL` is assembled by string interpolation:
+
+```
+postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+```
+
+Nothing URL-encodes the password, so punctuation in it produces a URL the backend cannot parse. It
+crash-loops before it ever opens a connection, and the only symptom is:
+
+```
+ERR unable to connect to database error="parse database url: cannot parse
+postgres://multica:xxxxxx@postgres:5432/multica?sslmode=disable:
+failed to parse as URL (net/url: invalid userinfo)"
+```
+
+Note the password is redacted in that message, which makes it look like a network or credential
+problem rather than a quoting one. It is neither. `openssl rand -hex 24` is safe because hex has no
+reserved characters. **This bit us on the first deploy**: left unset, Coolify generates its own
+password containing punctuation, and the stack came up with a healthy Postgres, a healthy frontend,
+and a backend restarting every 60s. Set the value explicitly.
+
+If Postgres has already initialised, changing the variable is not enough — `POSTGRES_PASSWORD` only
+applies at `initdb`. Realign the existing role, then redeploy:
+
+```bash
+docker exec -i $(docker ps -qf name=postgres-<uuid>) psql -U multica -d multica \
+  -c "ALTER USER multica WITH PASSWORD '<new-hex-password>';"
+```
+
+### Coolify pre-seeds every compose variable
+
+On first parse Coolify walks the compose file and creates an env var for each `${VAR}` it finds,
+using the `:-default` where there is one. Two consequences:
+
+- Creating a variable through the API returns `409 already exists`. Use `PATCH`, not `POST`.
+- Defaults that reference another variable are stored **literally**. `CORS_ALLOWED_ORIGINS` arrives
+  as the seven characters `${PUBLIC_ORIGIN}` and is never expanded, because Compose does not
+  re-interpolate a value it has already substituted. Set these to a concrete origin by hand:
+  `CORS_ALLOWED_ORIGINS`, `MULTICA_PUBLIC_URL`, `GOOGLE_REDIRECT_URI`. Getting
+  `CORS_ALLOWED_ORIGINS` wrong is quiet — plain HTTP keeps working and only `/ws` 403s.
+
 ### Strongly recommended
 
 **Email.** With neither Resend nor SMTP configured, login codes are only written to the backend log.
@@ -99,7 +142,7 @@ itself, which is what these labels on the `backend` service do:
 
 ```yaml
 - traefik.enable=true
-- traefik.http.routers.nrws.rule=Host(`${PUBLIC_HOST}`) && Path(`/ws`)
+- traefik.http.routers.nrws.rule=Host(`studio.navroop.app`) && Path(`/ws`)
 - traefik.http.routers.nrws.priority=100
 - traefik.http.routers.nrws.entrypoints=https
 - traefik.http.routers.nrws.tls=true
@@ -111,7 +154,27 @@ itself, which is what these labels on the `backend` service do:
 `PathPrefix(`/ws`)` would swallow it. The explicit priority beats Coolify's generated Host-only
 router for the frontend.
 
-Two things to watch:
+### The host in that rule cannot be a variable
+
+It is written out in full deliberately. Coolify rewrites every `$` inside a **label** to `$$` before
+handing the compose to Docker, and `$$` is Compose's escape for a literal `$`. So `${PUBLIC_HOST}`
+arrives at Traefik as those fifteen characters, the rule tries to match a host literally named
+`${PUBLIC_HOST}`, and it never fires. Verified in the generated file on the server:
+
+```
+53:  - 'traefik.http.routers.nrws.rule=Host(`$${PUBLIC_HOST}`) && Path(`/ws`)'
+```
+
+Coolify has to do this — a Traefik basic-auth hash looks like `$apr1$...` and would otherwise be
+eaten as interpolation. Only `environment:` gets interpolated; labels never do. **When the domain
+changes, edit this label by hand.**
+
+This failed exactly this way on the first deploy here, and it is invisible from the outside: a plain
+HTTP `GET /ws` still returns the backend's JSON, because `proxy.ts` forwards it. Only a real
+`Upgrade` fails. Do not treat a non-404 on `/ws` as proof the route works — check Traefik's router
+table.
+
+Two more things to watch:
 
 - **Coolify merges its own labels with these.** Confirm after the first deploy that the router
   survived and that the backend container is attached to the Coolify proxy network. This is the

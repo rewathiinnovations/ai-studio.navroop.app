@@ -36,7 +36,11 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-multica}
       POSTGRES_USER: ${POSTGRES_USER:-multica}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set — generate one with 'openssl rand -hex 24'}
+      # Must be URL-SAFE. DATABASE_URL below interpolates it into a URL with no
+      # encoding step, so punctuation yields an unparseable userinfo section and
+      # the backend crash-loops before it ever dials Postgres. Hex has no
+      # reserved characters. Left unset, Coolify generates one WITH punctuation.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set to a URL-SAFE value — generate one with 'openssl rand -hex 24'}
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
@@ -69,8 +73,14 @@ services:
       # Realtime only. Path() is an EXACT match, so the workspace slug /ws-foo
       # still reaches the frontend — PathPrefix(`/ws`) would swallow it.
       # The priority beats Coolify's generated Host-only frontend router.
+      # The host is HARDCODED on purpose. Coolify rewrites `$` to `$$` inside
+      # labels — it has to, or a basic-auth hash like $apr1$... would be eaten
+      # as interpolation — so `${PUBLIC_HOST}` reaches Traefik as those literal
+      # 15 characters and the router silently never matches. Verified: the
+      # generated compose contains `Host(`$${PUBLIC_HOST}`)`. Only `environment:`
+      # is interpolated, never labels. Change this line when the domain changes.
       - traefik.enable=true
-      - traefik.http.routers.nrws.rule=Host(`${PUBLIC_HOST}`) && Path(`/ws`)
+      - traefik.http.routers.nrws.rule=Host(`studio.navroop.app`) && Path(`/ws`)
       - traefik.http.routers.nrws.priority=100
       - traefik.http.routers.nrws.entrypoints=https
       - traefik.http.routers.nrws.tls=true
